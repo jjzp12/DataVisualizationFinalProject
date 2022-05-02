@@ -1,0 +1,206 @@
+---
+title: "Machine Learning Project"
+output: html_notebook
+---
+
+*Predicting Agilent Technologies Inc Stock with 2015-2016 data*
+ 
+# Libraries
+
+```{r}
+install.packages("caTools")
+install.packages("neuralnet")
+install.packages("kernlab")
+install.packages("olsrr")
+intall.packages("corrplot")
+```
+
+
+```{r}
+library(shiny)
+library(tidyverse)
+library(caret)
+library(scales)
+library(caTools)
+library(neuralnet)
+library(kernlab)
+library(ggthemes)
+library(plotly)
+library(gganimate)
+library(olsrr)
+library(stats)
+library(corrplot)
+library(class)
+```
+
+
+# Data 
+
+```{r}
+
+split <- read.csv("prices.csv",stringsAsFactors = T)
+
+```
+
+# Linear Regression
+
+```{r}
+split$volatility <- as.factor(ifelse(split$volume < 1221500, "Low",
+                                   ifelse(split$volume < 5415113, "Mid", "High")))
+
+split$volume <- as.numeric(split$volume)
+```
+
+```{r}
+set.seed(123)
+
+split$sample <- sample.split(split$volume, SplitRatio = 0.7)
+
+train <- subset(split, sample = TRUE)
+
+test <- subset(split, sample = FALSE)
+```
+
+```{r}
+lm <- lm(volume ~ open + close + low + high, data = train)
+
+lmprediction <- predict(lm, test)
+
+cat("Linear Regression RMSE", RMSE(lmprediction, test$volume), "\n")
+```
+```{r}
+ggplot(split, mapping = aes(x = volume, y = close)) + geom_point() +
+  geom_smooth(method = "lm")
+```
+
+# K Nearest Neighbors
+
+```{r}
+
+cor <- select(split, "volume", "open", "close", "low", "high")
+
+cordisplay <- cor(cor)
+
+corrplot(cordisplay, method = "number")
+
+```
+
+```{r}
+Knn.Train <- select(train, volume, open)
+
+Knn.Test <- select(test, volume, open)
+
+PredictedClass <- knn(train = Knn.Train, test = Knn.Test, cl = train$volatility, k = 3)
+
+Confusion <- table(PredictedClass, test$volatility)
+
+accuracy <- sum(diag(Confusion) / sum(Confusion))
+
+cat("Accurracy KNN:", accuracy)
+```
+
+# Support Vector Machine
+
+```{r}
+trainSVM <- select(train, open, close, low,
+                   high, volume, volatility)
+
+testSVM <- select(test, open, close, low,
+                   high, volume, volatility)
+```
+
+
+```{r}
+KernelFunction <- function(kernel){
+  
+  model <- ksvm(volatility ~ ., data = trainSVM, kernel = kernel)
+  
+  pred <- predict(model, testSVM)
+  
+  confusionMatrix <- table(pred, testSVM$volatility, 
+                           dnn = c("Prediction", "Actual"))
+  
+  accuracy <-  sum(diag(confusionMatrix) / sum(confusionMatrix))
+  
+  return(accuracy)
+}
+
+kernel<- c("vanilladot", "rbfdot", "polydot", "tanhdot")
+
+Accuracy.Kernels <- sapply(kernel, KernelFunction)
+
+```
+```{r}
+Kernel.Accuracy <- data.frame(Kernels = kernel, Accuracy = Accuracy.Kernels)
+
+Kernel.Accuracy
+```
+
+# Artificial Neural Network
+
+```{r}
+
+normalitycheck <- split[1:5000,]
+
+shapiro.test(normalitycheck$volume)
+
+```
+
+```{r}
+splitANN <- select(split, -1, -2, -8, -9)
+
+normal <- function(x) {
+  
+  return((x-min(x)) / (max(x)-min(x)))
+}
+
+splitNormal <- as.data.frame(lapply(splitANN, normal))
+
+
+```
+
+```{r}
+set.seed(123)
+
+splitNormal$volume <- sample.split(splitNormal$volume, SplitRatio = 0.70)
+
+
+splitNormalTrain <- subset(splitNormal, sample = T)
+
+
+splitNormalTest <- subset(splitNormal, sample = F)
+
+
+```
+
+
+```{r}
+
+splitNormalModel <- neuralnet(
+  formula = volume ~ open + close + low + high, data = splitNormalTrain)
+
+plot(splitNormalModel)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
